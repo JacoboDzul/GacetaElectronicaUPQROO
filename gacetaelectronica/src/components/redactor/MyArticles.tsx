@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle
@@ -13,65 +13,140 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle
 } from "@/components/ui/dialog"
-import { Eye, Edit, Trash2 } from "lucide-react"
+import { Eye, Edit, Trash2, Loader2 } from "lucide-react"
 import FilterSearchBar from "@/components/FilterSearchBar"
+import { useUser } from "@/contexts/UserContext"
 
-const mockArticles = [
-  {
-    id: 1,
-    title: "Nueva investigación en biotecnología",
-    category: "investigaciones",
-    status: "published",
-    createdAt: "2024-01-15",
-    content: "Investigadores han logrado avances significativos en la modificación genética de cultivos.",
-    image: "https://via.placeholder.com/600x300?text=Biotecnología"
-  },
-  {
-    id: 2,
-    title: "Evento cultural de fin de año",
-    category: "eventos",
-    status: "pending",
-    createdAt: "2024-01-14",
-    content: "El evento incluirá danza, música y exposiciones artísticas.",
-    image: "https://via.placeholder.com/600x300?text=Evento+Cultural"
-  },
-  {
-    id: 3,
-    title: "Convocatoria para becas de estudio",
-    category: "convocatorias",
-    status: "pending",
-    createdAt: "2024-01-13",
-    content: "Se abren nuevas convocatorias para becas en el extranjero para estudiantes destacados.",
-    image: "https://via.placeholder.com/600x300?text=Becas"
-  },
-  {
-    id: 4,
-    title: "Proyecto de sostenibilidad ambiental",
-    category: "proyectos",
-    status: "rejected",
-    createdAt: "2024-01-12",
-    content: "En respuesta a la creciente crisis ambiental que afecta a los océanos, nace el proyecto Costas Limpias, una iniciativa integral que busca reducir el consumo de plásticos de un solo uso en comunidades costeras mediante educación, alternativas sostenibles y participación activa de los habitantes.",
-    image: "https://images.pexels.com/photos/5864625/pexels-photo-5864625.jpeg"
-  },
-]
+interface Articulo {
+  IdArticulo: number;
+  Titulo: string;
+  Resumen: string;
+  Contenido: string;
+  Estatus: number;
+  FechaCreacion: string;
+  FechaRevision?: string;
+  Comentario?: string;
+  IdCategoria: number;
+  IdAutor: number;
+  IdRevisor?: number;
+  Categoria?: {
+    IdCategoria: number;
+    Nombre: string;
+  };
+}
 
-const getStatusBadge = (status: string) => {
+const getStatusBadge = (status: number) => {
   switch (status) {
-    case "published":
-      return <Badge className="bg-green-100 text-green-800">Publicado</Badge>
-    case "pending":
+    case 1:
       return <Badge className="bg-yellow-100 text-yellow-800">En Revisión</Badge>
-    case "rejected":
+    case 2:
       return <Badge className="bg-red-100 text-red-800">Rechazado</Badge>
+    case 3:
+      return <Badge className="bg-green-100 text-green-800">Publicado</Badge>
+    default:
+      return <Badge className="bg-gray-100 text-gray-800">Desconocido</Badge>
+  }
+}
+
+const getStatusText = (status: number) => {
+  switch (status) {
+    case 1:
+      return "En Revisión"
+    case 2:
+      return "Rechazado"
+    case 3:
+      return "Publicado"
+    default:
+      return "Desconocido"
   }
 }
 
 export default function MyArticles() {
+  const { user } = useUser()
+  const [articles, setArticles] = useState<Articulo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterBy, setFilterBy] = useState("category")
   const [filterValue, setFilterValue] = useState("all")
-  const [selectedArticle, setSelectedArticle] = useState<any | null>(null)
+  const [selectedArticle, setSelectedArticle] = useState<Articulo | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+  // Función para obtener el ID del usuario por email
+  // const getUserIdByEmail = async (email: string) => {
+  //   try {
+  //     const response = await fetch(`/api/usuarios?email=${encodeURIComponent(email)}`)
+  //     if (!response.ok) {
+  //       throw new Error('Error al obtener información del usuario')
+  //     }
+  //     const userData = await response.json()
+  //     return userData.IdUsuarios
+  //   } catch (error) {
+  //     console.error('Error al obtener ID del usuario:', error)
+  //     return null
+  //   }
+  // }
+
+  // Función para cargar artículos del usuario
+  const loadUserArticles = async () => {
+    if (!user?.email) {
+      setError('No se pudo identificar al usuario')
+      setLoading(false)
+      return
+    }
+  
+
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Usar ID fijo del usuario (Carmen Ríos)
+      const userId = 5;
+      if (!userId) {
+        setError('No se pudo obtener el ID del usuario')
+        setLoading(false)
+        return
+      }
+
+      // Obtener artículos del usuario usando la API articuloUsuario
+      const response = await fetch(`/api/articuloUsuario?usuarioId=${userId}`)
+      if (!response.ok) {
+        throw new Error('Error al cargar los artículos')
+      }
+
+      const userArticles = await response.json()
+      
+      // Para cada artículo, obtener información completa y categoría
+      const articlesWithDetails = await Promise.all(
+        userArticles.map(async (article: any) => {
+          try {
+            // Obtener información completa del artículo
+            const articleResponse = await fetch(`/api/articulos?id=${article.idArticulo}&include=categoria`)
+            if (articleResponse.ok) {
+              const articleData = await articleResponse.json()
+              return articleData
+            }
+            return article
+          } catch (error) {
+            console.error('Error al obtener detalles del artículo:', error)
+            return article
+          }
+        })
+      )
+
+      setArticles(articlesWithDetails)
+    } catch (error) {
+      console.error('Error al cargar artículos:', error)
+      setError('Error al cargar los artículos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadUserArticles()
+  }, [user])
 
   const handleAction = (action: string, title: string) => {
     toast(`${action} artículo`, {
@@ -79,25 +154,49 @@ export default function MyArticles() {
     })
   }
 
-  const handleViewArticle = (article: any) => {
+  const handleViewArticle = (article: Articulo) => {
     setSelectedArticle(article)
     setIsDialogOpen(true)
   }
 
-  const filteredArticles = mockArticles.filter((article) => {
-    const matchSearch = article.title.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleDeleteArticle = async (articleId: number) => {
+    try {
+      const response = await fetch(`/api/articulos?id=${articleId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Error al eliminar el artículo')
+      }
+
+      toast('Artículo eliminado', {
+        description: 'El artículo ha sido eliminado correctamente',
+      })
+
+      // Recargar la lista de artículos
+      loadUserArticles()
+    } catch (error) {
+      console.error('Error al eliminar artículo:', error)
+      toast('Error al eliminar', {
+        description: 'No se pudo eliminar el artículo',
+      })
+    }
+  }
+
+  const filteredArticles = articles.filter((article) => {
+    const matchSearch = article.Titulo.toLowerCase().includes(searchTerm.toLowerCase())
     let matchFilter = true
 
     if (filterValue !== "all") {
       switch (filterBy) {
         case "category":
-          matchFilter = article.category === filterValue
+          matchFilter = article.Categoria?.Nombre === filterValue
           break
         case "status":
-          matchFilter = article.status === filterValue
+          matchFilter = getStatusText(article.Estatus) === filterValue
           break
         case "createdAt":
-          matchFilter = article.createdAt === filterValue
+          matchFilter = article.FechaCreacion === filterValue
           break
       }
     }
@@ -107,8 +206,51 @@ export default function MyArticles() {
 
   const getFilterOptions = (field: string) => {
     const values = new Set<string>()
-    mockArticles.forEach((a) => values.add(a[field as keyof typeof a] as string))
+    articles.forEach((article) => {
+      switch (field) {
+        case "category":
+          if (article.Categoria?.Nombre) {
+            values.add(article.Categoria.Nombre)
+          }
+          break
+        case "status":
+          values.add(getStatusText(article.Estatus))
+          break
+        case "createdAt":
+          values.add(article.FechaCreacion)
+          break
+      }
+    })
     return Array.from(values)
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Mis Artículos</CardTitle>
+          <CardDescription>Cargando tus artículos...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center items-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Mis Artículos</CardTitle>
+          <CardDescription>Error al cargar los artículos</CardDescription>
+        </CardHeader>
+        <CardContent className="text-center py-8">
+          <p className="text-red-600 mb-4">{error}</p>
+          <Button onClick={loadUserArticles}>Reintentar</Button>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -149,23 +291,27 @@ export default function MyArticles() {
           </TableHeader>
           <TableBody>
             {filteredArticles.length > 0 ? (
-              filteredArticles.map((article) => (
-                <TableRow key={article.id}>
-                  <TableCell className="font-medium">{article.title}</TableCell>
-                  <TableCell className="capitalize">{article.category.replace("-", " ")}</TableCell>
-                  <TableCell>{getStatusBadge(article.status)}</TableCell>
-                  <TableCell>{article.createdAt}</TableCell>
+              filteredArticles.map((article,index) => (
+                <TableRow key={index}>
+                  <TableCell className="font-medium">{article.Titulo}</TableCell>
+                  <TableCell className="capitalize">{article.Categoria?.Nombre || 'Sin categoría'}</TableCell>
+                  <TableCell>{getStatusBadge(article.Estatus)}</TableCell>
+                  <TableCell>{new Date(article.FechaCreacion).toLocaleDateString('es-ES')}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="sm" onClick={() => handleViewArticle(article)}>
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {article.status === "rejected" && (
+                      {article.Estatus === 2 && (
                         <>
-                          <Button variant="ghost" size="sm" onClick={() => handleAction("Editar", article.title)}>
+                          <Button variant="ghost" size="sm" onClick={() => handleAction("Editar", article.Titulo)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleAction("Eliminar", article.title)}>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleDeleteArticle(article.IdArticulo)}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </>
@@ -188,20 +334,32 @@ export default function MyArticles() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{selectedArticle?.title}</DialogTitle>
-            <DialogDescription>Publicado el {selectedArticle?.createdAt}</DialogDescription>
+            <DialogTitle>{selectedArticle?.Titulo}</DialogTitle>
+            <DialogDescription>
+              Publicado el {selectedArticle?.FechaCreacion ? new Date(selectedArticle.FechaCreacion).toLocaleDateString('es-ES') : 'Fecha no disponible'}
+            </DialogDescription>
           </DialogHeader>
           <div className="max-h-96 overflow-y-auto pr-2 space-y-4">
-            {selectedArticle?.image && (
-              <img
-                src={selectedArticle.image}
-                alt="Imagen del artículo"
-                className="rounded-md w-full h-auto object-cover"
-              />
+            <div className="space-y-2">
+              <h4 className="font-semibold">Resumen:</h4>
+              <p className="text-sm text-muted-foreground">
+                {selectedArticle?.Resumen || "Este artículo no tiene resumen."}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-semibold">Contenido:</h4>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">
+                {selectedArticle?.Contenido || "Este artículo no tiene contenido aún."}
+              </p>
+            </div>
+            {selectedArticle?.Comentario && (
+              <div className="space-y-2">
+                <h4 className="font-semibold">Comentario del revisor:</h4>
+                <p className="text-sm text-muted-foreground">
+                  {selectedArticle.Comentario}
+                </p>
+              </div>
             )}
-            <p className="text-sm text-muted-foreground whitespace-pre-line">
-              {selectedArticle?.content || "Este artículo no tiene contenido aún."}
-            </p>
           </div>
         </DialogContent>
       </Dialog>
